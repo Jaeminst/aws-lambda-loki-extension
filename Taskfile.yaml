@@ -1,0 +1,25 @@
+# https://taskfilechoco install go-task.dev
+
+version: '3'
+
+vars:
+  EXTENSION: grafana-loki-extension
+
+tasks:
+  publish:
+    desc: Publish new layer version
+    dir: dist
+    deps: [build]
+    cmds:
+      - chmod +x extensions/{{.EXTENSION}}
+      - rm -f extension.zip
+      - zip -r extension.zip extensions/
+      - ARN=`aws lambda publish-layer-version --layer-name "grafana-loki-extension" --region ap-northeast-2 --compatible-runtimes nodejs18.x nodejs20.x go1.x python3.9 python3.11 --zip-file  "fileb://extension.zip" --query "LayerVersionArn" --output text` && echo $ARN
+    silent: false
+
+  build:
+    desc: build new layer version
+    dir: dist
+    cmds:
+      - cd .. && GOOS=linux GOARCH=amd64 go build -o dist/extensions/{{.EXTENSION}} main.go
+    silent: false

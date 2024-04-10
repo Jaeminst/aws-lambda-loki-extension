@@ -4,18 +4,19 @@
 package main
 
 import (
-	"aws-lambda-extensions/go-example-logs-api-extension/agent"
-	"aws-lambda-extensions/go-example-logs-api-extension/extension"
-	"aws-lambda-extensions/go-example-logs-api-extension/logsapi"
 	"context"
 	"fmt"
-	"github.com/golang-collections/go-datastructures/queue"
-	log "github.com/sirupsen/logrus"
+	"loki-logs/agent"
+	"loki-logs/extension"
+	"loki-logs/logsapi"
 	"os"
 	"os/signal"
 	"path"
 	"strings"
 	"syscall"
+
+	"github.com/golang-collections/go-datastructures/queue"
+	log "github.com/sirupsen/logrus"
 )
 
 // INITIAL_QUEUE_SIZE is the initial size set for the synchronous logQueue
@@ -45,11 +46,8 @@ func main() {
 		panic(err)
 	}
 
-	// Create S3 Logger
-	logsApiLogger, err := agent.NewS3Logger()
-	if err != nil {
-		logger.Fatal(err)
-	}
+	// Create Loki Logger
+	lokiLogger := agent.NewLokiLogger()
 
 	// A synchronous queue that is used to put logs from the goroutine (producer)
 	// and process the logs from main goroutine (consumer)
@@ -64,7 +62,7 @@ func main() {
 				return
 			}
 			logsStr = fmt.Sprintf("%v", logs[0])
-			err = logsApiLogger.PushLog(logsStr)
+			err = lokiLogger.PushLog(logsStr)
 			if err != nil {
 				logger.Error(printPrefix, err)
 				return
@@ -72,12 +70,11 @@ func main() {
 		}
 	}
 
-	// Create Logs API agent
-	logsApiAgent, err := agent.NewHttpAgent(logsApiLogger, logQueue)
+	// Create Logs API agent with LokiLogger
+	logsApiAgent, err := agent.NewHttpAgent(lokiLogger, logQueue)
 	if err != nil {
 		logger.Fatal(err)
 	}
-
 	// Subscribe to logs API
 	// Logs start being delivered only after the subscription happens.
 	agentID := extensionClient.ExtensionID

@@ -5,14 +5,15 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"time"
 
-	"aws-lambda-extensions/go-example-logs-api-extension/logsapi"
+	"loki-logs/logsapi"
 
 	"github.com/golang-collections/go-datastructures/queue"
 )
@@ -38,7 +39,7 @@ func NewLogsApiHttpListener(lq *queue.Queue) (*LogsApiHttpListener, error) {
 
 func ListenOnAddress() string {
 	env_aws_local, ok := os.LookupEnv("AWS_SAM_LOCAL")
-	if ok && "true" == env_aws_local {
+	if ok && env_aws_local == "true" {
 		return ":" + DefaultHttpListenerPort
 	}
 
@@ -69,25 +70,39 @@ func (s *LogsApiHttpListener) Start() (bool, error) {
 // Logging or printing besides the error cases below is not recommended if you have subscribed to receive extension logs.
 // Otherwise, logging here will cause Logs API to send new logs for the printed lines which will create an infinite loop.
 func (h *LogsApiHttpListener) http_handler(w http.ResponseWriter, r *http.Request) {
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		logger.Errorf("Error reading body: %+v", err)
-		return
+			logger.Errorf("Error reading body: %+v", err)
+			return
 	}
 
-	fmt.Println("Logs API event received:", string(body))
-
-	// Puts the log message into the queue
-	err = h.logQueue.Put(string(body))
+	// 로그 메시지들을 담은 JSON 배열을 정의합니다.
+	var logs []map[string]interface{}
+	err = json.Unmarshal(body, &logs)
 	if err != nil {
-		logger.Errorf("Can't push logs to destination: %v", err)
+			logger.Errorf("Error unmarshalling request body: %+v", err)
+			return
+	}
+
+	// 배열 내의 각 로그 항목을 순회하며 "type"이 "function"인 로그의 "record"만 선택합니다.
+	for _, logEntry := range logs {
+			if logType, ok := logEntry["type"].(string); ok && logType == "function" {
+					if record, ok := logEntry["record"].(string); ok {
+							// "record"를 logQueue에 넣습니다.
+							err = h.logQueue.Put(record)
+							if err != nil {
+									logger.Errorf("Can't push logs to destination: %v", err)
+							}
+					}
+			}
 	}
 }
 
 // Shutdown terminates the HTTP server listening for logs
 func (s *LogsApiHttpListener) Shutdown() {
 	if s.httpServer != nil {
-		ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
 		err := s.httpServer.Shutdown(ctx)
 		if err != nil {
 			logger.Errorf("Failed to shutdown http server gracefully %s", err)
@@ -97,23 +112,26 @@ func (s *LogsApiHttpListener) Shutdown() {
 	}
 }
 
-// HttpAgent has the listener that receives the logs and the logger that handles the received logs
+type Logger interface {
+	PushLog(log string) error
+	Shutdown() error
+}
+
 type HttpAgent struct {
 	listener *LogsApiHttpListener
-	logger   *S3Logger
+	logger   Logger
 }
 
 // NewHttpAgent returns an agent to listen and handle logs coming from Logs API for HTTP
 // Make sure the agent is initialized by calling Init(agentId) before subscription for the Logs API.
-func NewHttpAgent(s3Logger *S3Logger, jq *queue.Queue) (*HttpAgent, error) {
-
+func NewHttpAgent(logger Logger, jq *queue.Queue) (*HttpAgent, error) {
 	logsApiListener, err := NewLogsApiHttpListener(jq)
 	if err != nil {
 		return nil, err
 	}
 
 	return &HttpAgent{
-		logger:   s3Logger,
+		logger:   logger,
 		listener: logsApiListener,
 	}, nil
 }
@@ -143,9 +161,7 @@ func (a HttpAgent) Init(agentID string) error {
 		MaxBytes:  262144,
 		TimeoutMS: 1000,
 	}
-	if err != nil {
-		return err
-	}
+
 	destination := logsapi.Destination{
 		Protocol:   logsapi.HttpProto,
 		URI:        logsapi.URI(fmt.Sprintf("http://sandbox:%s", DefaultHttpListenerPort)),
