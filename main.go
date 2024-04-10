@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"loki-logs/agent"
 	"loki-logs/extension"
@@ -47,7 +48,10 @@ func main() {
 	}
 
 	// Create Loki Logger
-	lokiLogger := agent.NewLokiLogger()
+	lokiLogger, err := agent.NewLokiLogger()
+	if err != nil {
+		logger.Fatal(err)
+	}
 
 	// A synchronous queue that is used to put logs from the goroutine (producer)
 	// and process the logs from main goroutine (consumer)
@@ -62,7 +66,46 @@ func main() {
 				return
 			}
 			logsStr = fmt.Sprintf("%v", logs[0])
-			err = lokiLogger.PushLog(logsStr)
+
+			type LogEntry struct {
+				Time   string      `json:"time"`
+				Type   string      `json:"type"`
+				Record interface{} `json:"record"`
+			}
+
+			logEntries := []LogEntry{}
+			err = json.Unmarshal([]byte(logsStr), &logEntries)
+			if err != nil {
+					fmt.Println("Error unmarshalling JSON:", err)
+					return
+			}
+
+			var log string = ""
+			for _, entry := range logEntries {
+				switch record := entry.Record.(type) {
+				case string:
+						// Record가 문자열인 경우
+						fmt.Printf("Time: %s, Type: %s, Record: %s\n", entry.Time, entry.Type, record)
+						if entry.Type == "function" {
+							log += record + "\n"
+						}
+				case map[string]interface{}:
+						// Record가 JSON 객체인 경우
+						recordBytes, err := json.Marshal(record)
+						if err != nil {
+								fmt.Println("Error marshalling record:", err)
+								continue
+						}
+						fmt.Printf("Time: %s, Type: %s, Record: %s\n", entry.Time, entry.Type, string(recordBytes))
+						if entry.Type == "function" {
+							log += string(recordBytes) + "\n"
+						}
+				default:
+						fmt.Println("Unknown Record type")
+				}
+			}
+
+			err = lokiLogger.PushLog(log)
 			if err != nil {
 				logger.Error(printPrefix, err)
 				return
@@ -97,6 +140,7 @@ func main() {
 				logger.Info(printPrefix, "Exiting")
 				return
 			}
+			logger.Info(printPrefix, " Invoke Function")
 			// Flush log queue in here after waking up
 			flushLogQueue(false)
 			// Exit if we receive a SHUTDOWN event

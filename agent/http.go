@@ -5,7 +5,6 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -72,29 +71,16 @@ func (s *LogsApiHttpListener) Start() (bool, error) {
 func (h *LogsApiHttpListener) http_handler(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-			logger.Errorf("Error reading body: %+v", err)
-			return
+		logger.Errorf("Error reading body: %+v", err)
+		return
 	}
 
-	// 로그 메시지들을 담은 JSON 배열을 정의합니다.
-	var logs []map[string]interface{}
-	err = json.Unmarshal(body, &logs)
+	fmt.Println("Logs API event received:", string(body))
+
+	// Puts the log message into the queue
+	err = h.logQueue.Put(string(body))
 	if err != nil {
-			logger.Errorf("Error unmarshalling request body: %+v", err)
-			return
-	}
-
-	// 배열 내의 각 로그 항목을 순회하며 "type"이 "function"인 로그의 "record"만 선택합니다.
-	for _, logEntry := range logs {
-			if logType, ok := logEntry["type"].(string); ok && logType == "function" {
-					if record, ok := logEntry["record"].(string); ok {
-							// "record"를 logQueue에 넣습니다.
-							err = h.logQueue.Put(record)
-							if err != nil {
-									logger.Errorf("Can't push logs to destination: %v", err)
-							}
-					}
-			}
+		logger.Errorf("Can't push logs to destination: %v", err)
 	}
 }
 

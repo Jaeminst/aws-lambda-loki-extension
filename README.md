@@ -42,10 +42,11 @@ aws lambda update-function-configuration --region <use your region> --function-n
 ```
 
 ## Function Invocation and Extension Execution
-> Note: Your function role should have the AmazonS3FullAccess policy attached.
 
-> Note: You need to add `LOGS_API_EXTENSION_S3_BUCKET` environment variable to your lambda function. The value of this variable will be used to create a bucket or use an existing bucket if it is created previously. The logs received from Logs API will be written in a file inside that bucket. For S3 bucket naming rules, see [AWS docs](https://docs.aws.amazon.com/AmazonS3/latest/dev/BucketRestrictions.html).
+Configure the extension by setting below environment variables
 
-After invoking the function and receiving the shutdown event, you should now see log messages from the example extension written to an S3 bucket with the following name format:
+* `LOKI_PUSH_URL` - This is the URL to your Loki instance. It should include the scheme (http or https), the hostname, and the port number if applicable. Do not include the API endpoint path (/loki/api/v1/push) in this URL; the extension will automatically append the necessary path to this base URL.
+Example: `http://localhost:3100`
 
-`<function-name>-<timestamp>-<UUID>.log` in to the bucket set with the environment variable above.
+* `LOKI_AUTH_TOKEN` - The authentication token required for pushing logs to your Loki instance. This token is used to authenticate the requests made from the extension to the Loki server. Depending on your Loki setup, this might be a "Bearer" token or another form of API key.
+Example: `eyJhbGciOiJIUzI1NiIsInR5cCIgOiAi...`

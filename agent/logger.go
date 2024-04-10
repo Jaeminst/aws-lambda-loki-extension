@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,34 +17,40 @@ var logger = log.WithFields(log.Fields{"agent": "lokiLogger"})
 
 // LokiLogger 구조체를 정의합니다. Loki 서버의 URL과 필요한 설정을 포함합니다.
 type LokiLogger struct {
+	functionName string
 	lokiAddress string
 	httpClient  *http.Client
 }
 
 // NewLokiLogger 함수는 새로운 LokiLogger 인스턴스를 생성하고 초기화합니다.
-func NewLokiLogger() *LokiLogger {
-	lokiAddress := os.Getenv("LOKI_ADDRESS") // 환경변수에서 Loki 서버 주소를 가져옵니다.
-	if lokiAddress == "" {
-		lokiAddress = "http://localhost:3100" // 기본 Loki 서버 주소
+func NewLokiLogger() (*LokiLogger, error) {
+	fName := os.Getenv("AWS_LAMBDA_FUNCTION_NAME")
+	lokiAddress, ok := os.LookupEnv("LOKI_PUSH_URL") // 환경변수에서 Loki 서버 주소를 가져옵니다.
+	if !ok {
+		return nil, errors.New("LOKI_PUSH_URL is not set")
 	}
 
 	return &LokiLogger{
+		functionName: fName,
 		lokiAddress: lokiAddress,
 		httpClient:  &http.Client{
 			Timeout: 10 * time.Second,
 		},
-	}
+	}, nil
 }
 
 // PushLog 메소드는 로그 메시지를 Loki 서버로 전송합니다.
 func (l *LokiLogger) PushLog(logEntry string) error {
+	if logEntry == "" {
+		return nil
+	}
 	// Loki에 보낼 로그 데이터를 생성합니다.
 	logData := map[string]interface{}{
 		"streams": []map[string]interface{}{
 			{
 				"stream": map[string]string{
-					"source": "lambda", // 로그 소스를 식별하는 데 사용할 추가 필드를 추가할 수 있습니다.
-					// 여기에 더 많은 라벨을 추가할 수 있습니다.
+					"job": "lambda",
+					"function_name": l.functionName,
 				},
 				"values": [][]string{
 					{strconv.FormatInt(time.Now().UnixNano(), 10), logEntry},
@@ -64,6 +71,10 @@ func (l *LokiLogger) PushLog(logEntry string) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	authToken, ok := os.LookupEnv("LOKI_AUTH_TOKEN")
+	if ok {
+		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
 
 	resp, err := l.httpClient.Do(req)
 	if err != nil {
