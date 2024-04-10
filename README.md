@@ -46,7 +46,7 @@ aws lambda update-function-configuration --region <use your region> --function-n
 Configure the extension by setting below environment variables
 
 * `LOKI_PUSH_URL` - This is the URL to your Loki instance. It should include the scheme (http or https), the hostname, and the port number if applicable. Do not include the API endpoint path (/loki/api/v1/push) in this URL; the extension will automatically append the necessary path to this base URL.
-Example: `http://localhost:3100`
+    > Example: `http://localhost:3100`
 
 * `LOKI_AUTH_TOKEN` - The authentication token required for pushing logs to your Loki instance. This token is used to authenticate the requests made from the extension to the Loki server. Depending on your Loki setup, this might be a "Bearer" token or another form of API key.
-Example: `eyJhbGciOiJIUzI1NiIsInR5cCIgOiAi...`
+    > Example: `eyJhbGciOiJIUzI1NiIsInR5cCIgOiAi...`
