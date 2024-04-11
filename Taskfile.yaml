@@ -7,19 +7,43 @@ vars:
 
 tasks:
   publish:
-    desc: Publish new layer version
-    dir: dist
-    deps: [build]
+    cmds:
+      - task: publish-arm
+      - task: publish-amd
+    parallel: true
+
+  publish-arm:
+    desc: Publish new layer version with ARM64
+    dir: dist/arm
+    deps: [build-arm]
     cmds:
       - chmod +x extensions/{{.EXTENSION}}
       - rm -f extension.zip
       - zip -r extension.zip extensions/
-      - ARN=`aws lambda publish-layer-version --layer-name "grafana-loki-extension" --region ap-northeast-2 --compatible-runtimes nodejs18.x nodejs20.x go1.x python3.9 python3.11 --zip-file  "fileb://extension.zip" --query "LayerVersionArn" --output text` && echo $ARN
+      - ARN=`aws lambda publish-layer-version --layer-name {{.EXTENSION}}-arm64 --region ap-northeast-2 --compatible-runtimes nodejs18.x nodejs20.x go1.x python3.9 python3.10 python3.11 python3.12 --compatible-architectures arm64 --zip-file  "fileb://extension.zip" --query "LayerVersionArn" --output text` && echo "ARM64 $ARN"
     silent: false
 
-  build:
-    desc: build new layer version
+  publish-amd:
+    desc: Publish new layer version with x86_64
+    dir: dist/amd
+    deps: [build-amd]
+    cmds:
+      - chmod +x extensions/{{.EXTENSION}}
+      - rm -f extension.zip
+      - zip -r extension.zip extensions/
+      - ARN=`aws lambda publish-layer-version --layer-name {{.EXTENSION}}-x86_64 --region ap-northeast-2 --compatible-runtimes nodejs18.x nodejs20.x go1.x python3.9 python3.10 python3.11 python3.12 --compatible-architectures x86_64 --zip-file  "fileb://extension.zip" --query "LayerVersionArn" --output text` && echo "AMD64 $ARN"
+    silent: false
+
+  build-arm:
+    desc: build new layer version with ARM64
     dir: dist
     cmds:
-      - cd .. && GOOS=linux GOARCH=amd64 go build -o dist/extensions/{{.EXTENSION}} main.go
+      - cd .. && GOOS=linux GOARCH=arm64 go build -o dist/arm/extensions/{{.EXTENSION}} main.go
+    silent: false
+
+  build-amd:
+    desc: build new layer version with AMD64
+    dir: dist
+    cmds:
+      - cd .. && GOOS=linux GOARCH=amd64 go build -o dist/amd/extensions/{{.EXTENSION}} main.go
     silent: false
