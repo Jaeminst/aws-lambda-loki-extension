@@ -13,8 +13,10 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/golang-collections/go-datastructures/queue"
 	log "github.com/sirupsen/logrus"
@@ -76,38 +78,53 @@ func main() {
 			logEntries := []LogEntry{}
 			err = json.Unmarshal([]byte(logsStr), &logEntries)
 			if err != nil {
-					fmt.Println("Error unmarshalling JSON:", err)
+					logger.Error(printPrefix, "Error unmarshalling JSON:", err)
 					return
 			}
 
-			var log string = ""
+			var preparedLogs [][]string
 			for _, entry := range logEntries {
-				switch record := entry.Record.(type) {
-				case string:
-						// Record가 문자열인 경우
-						fmt.Printf("Time: %s, Type: %s, Record: %s\n", entry.Time, entry.Type, record)
-						if entry.Type == "function" {
-							log += record + "\n"
+				if entry.Type == "function" {
+					recordStr, ok := entry.Record.(string)
+					if !ok {
+						logger.Error(printPrefix, "Record is not a string")
+						continue
+					}
+
+					var level string
+					var jsonData map[string]interface{}
+					err := json.Unmarshal([]byte(recordStr), &jsonData)
+					if err == nil {
+						// Unmarshal 성공: input은 JSON 형태입니다.
+						lvl, levelOk := jsonData["level"].(string)
+						level = lvl
+						message, messageOk := jsonData["message"].(string)
+						if levelOk && messageOk {
+							// level과 message를 사용합니다.
+							recordStr = fmt.Sprintf("%s\t%s", level, message)
 						}
-				case map[string]interface{}:
-						// Record가 JSON 객체인 경우
-						recordBytes, err := json.Marshal(record)
-						if err != nil {
-								fmt.Println("Error marshalling record:", err)
-								continue
+					} else {
+						// Unmarshal 실패: input은 일반 문자열입니다.
+						parts := strings.Split(recordStr, "\t")
+						if len(parts) > 2 {
+							level = parts[2]
+							recordStr = strings.Join(parts[2:], "\t")
 						}
-						fmt.Printf("Time: %s, Type: %s, Record: %s\n", entry.Time, entry.Type, string(recordBytes))
-						if entry.Type == "function" {
-							log += string(recordBytes) + "\n"
-						}
-				default:
-						fmt.Println("Unknown Record type")
+					}
+
+					t, err := time.Parse(time.RFC3339Nano, entry.Time)
+					if err != nil {
+						fmt.Println("Error parsing time:", err)
+						return
+					}
+					unixNano := strconv.FormatInt(t.UnixNano(), 10)
+					preparedLogs = append(preparedLogs, []string{unixNano, recordStr, level})
 				}
 			}
 
-			err = lokiLogger.PushLog(log)
+			err = lokiLogger.PushLog(preparedLogs)
 			if err != nil {
-				logger.Error(printPrefix, err)
+				logger.Error(printPrefix, "Error pushing logs to Loki:", err)
 				return
 			}
 		}
@@ -140,6 +157,7 @@ func main() {
 				logger.Info(printPrefix, "Exiting")
 				return
 			}
+			lokiLogger.SetRequestId(res.RequestID)
 			logger.Info(printPrefix, " Invoke Function")
 			// Flush log queue in here after waking up
 			flushLogQueue(false)

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -18,6 +17,7 @@ var logger = log.WithFields(log.Fields{"agent": "lokiLogger"})
 // LokiLogger 구조체를 정의합니다. Loki 서버의 URL과 필요한 설정을 포함합니다.
 type LokiLogger struct {
 	functionName string
+	requestId string
 	lokiAddress string
 	httpClient  *http.Client
 }
@@ -39,24 +39,38 @@ func NewLokiLogger() (*LokiLogger, error) {
 	}, nil
 }
 
+func (l *LokiLogger) SetRequestId(requestId string) {
+	l.requestId = requestId
+}
+
 // PushLog 메소드는 로그 메시지를 Loki 서버로 전송합니다.
-func (l *LokiLogger) PushLog(logEntry string) error {
-	if logEntry == "" {
-		return nil
+func (l *LokiLogger) PushLog(logEntries [][]string) error {
+	if len(logEntries) == 0 {
+		return nil // 로그 엔트리가 비어있는 경우 바로 반환
 	}
-	// Loki에 보낼 로그 데이터를 생성합니다.
-	logData := map[string]interface{}{
-		"streams": []map[string]interface{}{
-			{
-				"stream": map[string]string{
-					"job": "lambda",
-					"function_name": l.functionName,
-				},
-				"values": [][]string{
-					{strconv.FormatInt(time.Now().UnixNano(), 10), logEntry},
-				},
+
+	streams := make(map[string][][2]string)
+	for _, entry := range logEntries {
+		level := entry[2]
+		streams[level] = append(streams[level], [2]string{entry[0], entry[1]})
+	}
+
+	var logDataStreams []map[string]interface{}
+	for level, values := range streams {
+		stream := map[string]interface{}{
+			"stream": map[string]string{
+				"job": "lambda",
+				"function_name": l.functionName,
+				"request_id": l.requestId,
+				"level": level,
 			},
-		},
+			"values": values,
+		}
+		logDataStreams = append(logDataStreams, stream)
+	}
+
+	logData := map[string]interface{}{
+		"streams": logDataStreams,
 	}
 
 	data, err := json.Marshal(logData)

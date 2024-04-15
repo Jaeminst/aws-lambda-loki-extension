@@ -47,3 +47,14 @@ tasks:
     cmds:
       - cd .. && GOOS=linux GOARCH=amd64 go build -o dist/amd/extensions/{{.EXTENSION}} main.go
     silent: false
+
+  publish-test:
+    desc: Publish new layer version with x86_64
+    dir: dist/amd
+    deps: [build-amd]
+    cmds:
+      - chmod +x extensions/{{.EXTENSION}}
+      - rm -f extension.zip
+      - zip -r extension.zip extensions/
+      - ARN=`aws lambda publish-layer-version --layer-name {{.EXTENSION}}-test --region ap-northeast-2 --compatible-runtimes nodejs18.x nodejs20.x go1.x python3.9 python3.10 python3.11 python3.12 --compatible-architectures x86_64 --zip-file  "fileb://extension.zip" --query "LayerVersionArn" --output text` && echo "AMD64 $ARN"
+    silent: false

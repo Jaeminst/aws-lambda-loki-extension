@@ -99,7 +99,7 @@ func (s *LogsApiHttpListener) Shutdown() {
 }
 
 type Logger interface {
-	PushLog(log string) error
+	PushLog(logEntries [][]string) error
 	Shutdown() error
 }
 
