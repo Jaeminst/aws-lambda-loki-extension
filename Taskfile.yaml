@@ -58,3 +58,22 @@ tasks:
       - zip -r extension.zip extensions/
       - ARN=`aws lambda publish-layer-version --layer-name {{.EXTENSION}}-test --region ap-northeast-2 --compatible-runtimes nodejs18.x nodejs20.x go1.x python3.9 python3.10 python3.11 python3.12 --compatible-architectures x86_64 --zip-file  "fileb://extension.zip" --query "LayerVersionArn" --output text` && echo "AMD64 $ARN"
     silent: false
+
+  docker-arm:
+    desc: Build docker image with ARM64
+    cmds:
+      - docker buildx build --platform linux/arm64 --build-arg ARCH=arm64 -t {{.EXTENSION}}:1 --load .
+    silent: false
+
+  docker-amd:
+    desc: Build docker image with AMD64
+    cmds:
+      - docker buildx build --platform linux/amd64 --build-arg ARCH=amd64 -t {{.EXTENSION}}:1 --load .
+    silent: false
+
+  publish-docker:
+    desc: Build docker image with Buildx
+    cmds:
+      - docker buildx create --use
+      - docker buildx build --platform linux/amd64,linux/arm64 -t your-registry/{{.EXTENSION}}:1 --push .
+    silent: false
