@@ -15,4 +15,4 @@ RUN go build -o extensions/aws-lambda-loki-extension main.go
 RUN chmod +x extensions/aws-lambda-loki-extension
 
 FROM scratch
-COPY --from=builder /build/extensions/aws-lambda-loki-extension /opt/extensions
+COPY --from=builder /build/extensions /opt/extensions
