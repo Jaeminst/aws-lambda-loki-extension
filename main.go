@@ -75,7 +75,7 @@ func main() {
 				Record interface{} `json:"record"`
 			}
 
-			logEntries := []LogEntry{}
+			var logEntries []LogEntry
 			err = json.Unmarshal([]byte(logsStr), &logEntries)
 			if err != nil {
 					logger.Error(printPrefix, "Error unmarshalling JSON:", err)
@@ -91,25 +91,49 @@ func main() {
 						continue
 					}
 
-					var level string
-					var jsonData map[string]interface{}
-					err := json.Unmarshal([]byte(recordStr), &jsonData)
-					if err == nil {
-						// Unmarshal 성공: input은 JSON 형태입니다.
-						lvl, levelOk := jsonData["level"].(string)
-						level = lvl
-						message, messageOk := jsonData["message"].(string)
-						if levelOk && messageOk {
-							// level과 message를 사용합니다.
-							recordStr = fmt.Sprintf("%s\t%s", level, message)
+					var level string = "LOGS"
+					normalizedRecord := strings.ToLower(recordStr)
+					if strings.Contains(normalizedRecord, "level") {
+						var jsonData map[string]interface{}
+						err := json.Unmarshal([]byte(recordStr), &jsonData)
+						if err == nil {
+							// Unmarshal 성공: input은 JSON 형태입니다.
+							switch lvl := jsonData["level"].(type) {
+							case float64:
+								level = strconv.FormatFloat(lvl, 'f', 0, 64)
+							case string:
+								level = lvl
+							}
+							message, messageOk := jsonData["message"].(string)
+							if messageOk {
+								// level과 message를 사용합니다.
+								recordStr = fmt.Sprintf("%s\t%s", level, message)
+							}
+							msg, msgOk := jsonData["msg"].(string)
+							if msgOk {
+								// level과 message를 사용합니다.
+								recordStr = fmt.Sprintf("%s\t%s", level, msg)
+							}
+						} else {
+							// Unmarshal 실패: input은 일반 문자열입니다.
+							parts := strings.Split(recordStr, "\t")
+							if len(parts) > 2 {
+								level = parts[2]
+								recordStr = strings.Join(parts[2:], "\t")
+							}
 						}
 					} else {
-						// Unmarshal 실패: input은 일반 문자열입니다.
-						parts := strings.Split(recordStr, "\t")
-						if len(parts) > 2 {
-							level = parts[2]
-							recordStr = strings.Join(parts[2:], "\t")
-						}
+            if strings.Contains(normalizedRecord, "fatal") {
+							level = "FATAL"
+            } else if strings.Contains(normalizedRecord, "error") {
+							level = "ERROR"
+            } else if strings.Contains(normalizedRecord, "warn") {
+							level = "WARN"
+            } else if strings.Contains(normalizedRecord, "info") {
+							level = "INFO"
+            } else if strings.Contains(normalizedRecord, "debug") {
+							level = "DEBUG"
+            }
 					}
 
 					t, err := time.Parse(time.RFC3339Nano, entry.Time)
