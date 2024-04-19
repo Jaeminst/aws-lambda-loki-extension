@@ -62,18 +62,18 @@ tasks:
   docker-arm:
     desc: Build docker image with ARM64
     cmds:
-      - docker buildx build --platform linux/arm64 --build-arg ARCH=arm64 -t {{.EXTENSION}}:1 --load .
+      - docker buildx build --platform linux/arm64 --build-arg ARCH=arm64 -t {{.EXTENSION}}:latest --load .
     silent: false
 
   docker-amd:
     desc: Build docker image with AMD64
     cmds:
-      - docker buildx build --platform linux/amd64 --build-arg ARCH=amd64 -t {{.EXTENSION}}:1 --load .
+      - docker buildx build --platform linux/amd64 --build-arg ARCH=amd64 -t {{.EXTENSION}}:latest --load .
     silent: false
 
   publish-docker:
     desc: Build docker image with Buildx
     cmds:
       - docker buildx create --use
-      - docker buildx build --platform linux/amd64,linux/arm64 -t your-registry/{{.EXTENSION}}:1 --push .
+      - docker buildx build --platform linux/amd64,linux/arm64 -t your-registry/{{.EXTENSION}}:1 -t your-registry/{{.EXTENSION}}:latest --push .
     silent: false
