@@ -36,16 +36,14 @@ tasks:
 
   build-arm:
     desc: build new layer version with ARM64
-    dir: dist
     cmds:
-      - cd .. && GOOS=linux GOARCH=arm64 go build -o dist/arm/extensions/{{.EXTENSION}} main.go
+      - cd src && GOOS=linux GOARCH=arm64 go build -o ../dist/arm/extensions/{{.EXTENSION}} main.go
     silent: false
 
   build-amd:
     desc: build new layer version with AMD64
-    dir: dist
     cmds:
-      - cd .. && GOOS=linux GOARCH=amd64 go build -o dist/amd/extensions/{{.EXTENSION}} main.go
+      - cd src && GOOS=linux GOARCH=amd64 go build -o ../dist/amd/extensions/{{.EXTENSION}} main.go
     silent: false
 
   publish-test:

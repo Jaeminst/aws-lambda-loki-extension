@@ -1,18 +1,22 @@
 FROM golang:alpine AS builder
 
-ARG ARCH
 ENV GO111MODULE=on \
     CGO_ENABLED=0 \
-    GOOS=linux \
-    GOARCH=${ARCH:-amd64}
+    GOOS=linux
 
-WORKDIR /build
+ARG TARGETARCH
+ENV GOARCH=$TARGETARCH
 
-COPY . .
+WORKDIR /opt
 
+COPY src/go.mod src/go.sum ./
 RUN go mod download
-RUN go build -o extensions/aws-lambda-loki-extension main.go
-RUN chmod +x extensions/aws-lambda-loki-extension
+
+COPY src .
+
+RUN go build -ldflags "-s -w" -o extensions/aws-lambda-loki-extension main.go
+RUN chmod -R 755 extensions/aws-lambda-loki-extension
 
 FROM scratch
-COPY --from=builder /build/extensions /opt/extensions
+WORKDIR /opt/extensions
+COPY --from=builder /opt/extensions .
