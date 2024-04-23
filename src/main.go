@@ -109,11 +109,6 @@ func main() {
 								// level과 message를 사용합니다.
 								recordStr = fmt.Sprintf("%s\t%s", level, message)
 							}
-							msg, msgOk := jsonData["msg"].(string)
-							if msgOk {
-								// level과 message를 사용합니다.
-								recordStr = fmt.Sprintf("%s\t%s", level, msg)
-							}
 						} else {
 							// Unmarshal 실패: input은 일반 문자열입니다.
 							parts := strings.Split(recordStr, "\t")
