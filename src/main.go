@@ -55,6 +55,17 @@ func main() {
 		logger.Fatal(err)
 	}
 
+	// customLevels 전역 변수 설정
+	customLevels := make(map[string]string)
+	if levels, ok := os.LookupEnv("LOKI_CUSTOM_LEVEL"); ok && levels != "" {
+		for _, level := range strings.Split(levels, ",") {
+			parts := strings.Split(level, "=")
+			if len(parts) == 2 {
+				customLevels[parts[0]] = parts[1]
+			}
+		}
+	}
+
 	// A synchronous queue that is used to put logs from the goroutine (producer)
 	// and process the logs from main goroutine (consumer)
 	logQueue := queue.New(INITIAL_QUEUE_SIZE)
@@ -84,6 +95,25 @@ func main() {
 
 			var preparedLogs [][]string
 			for _, entry := range logEntries {
+				if entry.Type == "platform.start" {
+					recordBytes, err := json.Marshal(entry.Record)
+					if err != nil {
+							logger.Error(printPrefix, "Error marshalling record:", err)
+							continue
+					}
+					type Record struct {
+							RequestId string `json:"requestId"`
+							Version   string `json:"version"`
+					}
+					var recordData Record
+					err = json.Unmarshal(recordBytes, &recordData)
+					if err != nil {
+							logger.Error(printPrefix, "Error unmarshalling record:", err)
+							continue
+					}
+					lokiLogger.SetRequestId(recordData.RequestId)
+					continue
+				}
 				if entry.Type == "function" {
 					recordStr, ok := entry.Record.(string)
 					if !ok {
@@ -131,10 +161,15 @@ func main() {
             }
 					}
 
+					// 사용자 정의 레벨 확인
+					if customLevel, exists := customLevels[level]; exists {
+						level = customLevel
+					}
+
 					t, err := time.Parse(time.RFC3339Nano, entry.Time)
 					if err != nil {
 						fmt.Println("Error parsing time:", err)
-						return
+						continue
 					}
 					unixNano := strconv.FormatInt(t.UnixNano(), 10)
 					preparedLogs = append(preparedLogs, []string{unixNano, recordStr, level})
@@ -144,7 +179,7 @@ func main() {
 			err = lokiLogger.PushLog(preparedLogs)
 			if err != nil {
 				logger.Error(printPrefix, "Error pushing logs to Loki:", err)
-				return
+				continue
 			}
 		}
 	}
@@ -176,7 +211,6 @@ func main() {
 				logger.Info(printPrefix, "Exiting")
 				return
 			}
-			lokiLogger.SetRequestId(res.RequestID)
 			logger.Info(printPrefix, " Invoke Function")
 			// Flush log queue in here after waking up
 			flushLogQueue(false)
